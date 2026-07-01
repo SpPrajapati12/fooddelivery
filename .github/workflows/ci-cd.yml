@@ -13,7 +13,7 @@ env:
   CONTAINER_PORT: 80
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: self-hosted
 
     steps:
@@ -23,33 +23,38 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 16
+          node-version: 18
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
 
-      # Uncomment when you have tests
-      # - name: Run Tests
-      #   run: npm test -- --watchAll=false --passWithNoTests
-
+      # ---------------- BUILD PHASE ----------------
       - name: Build React App
-        run: npm run build
+        id: build
+        run: |
+          echo "Starting build..."
+          npm run build
+          echo "Build completed successfully"
 
+      # ---------------- DOCKER BUILD ----------------
       - name: Build Docker Image
-        run: docker build -t ${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} .
+        id: docker_build
+        run: |
+          docker build -t ${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} .
+          echo "Docker image built successfully"
 
+      # ---------------- STOP OLD CONTAINER ----------------
       - name: Stop Existing Container
         shell: cmd
         run: |
-          docker stop ${{ env.CONTAINER_NAME }}
-        continue-on-error: true
+          docker stop ${{ env.CONTAINER_NAME }} || exit 0
 
       - name: Remove Existing Container
         shell: cmd
         run: |
-          docker rm ${{ env.CONTAINER_NAME }}
-        continue-on-error: true
+          docker rm ${{ env.CONTAINER_NAME }} || exit 0
 
+      # ---------------- RUN NEW CONTAINER ----------------
       - name: Run Docker Container
         run: |
           docker run -d ^
@@ -57,5 +62,23 @@ jobs:
           --name ${{ env.CONTAINER_NAME }} ^
           ${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
 
-      - name: Show Running Containers
-        run: docker ps
+      # ---------------- VERIFY DEPLOYMENT ----------------
+      - name: Verify Container Status
+        run: |
+          docker ps | findstr ${{ env.CONTAINER_NAME }}
+          if %ERRORLEVEL% NEQ 0 exit 1
+
+      - name: Show Logs (if needed)
+        if: failure()
+        run: |
+          docker logs ${{ env.CONTAINER_NAME }}
+
+      # ---------------- SUCCESS MESSAGE ----------------
+      - name: Deployment Success
+        if: success()
+        run: echo "Deployment completed successfully 🚀"
+
+      # ---------------- FAILURE MESSAGE ----------------
+      - name: Deployment Failed
+        if: failure()
+        run: echo "Build or Deployment failed ❌"
