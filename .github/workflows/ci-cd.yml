@@ -122,9 +122,10 @@ on:
 
 env:
   APP_NAME: react-ecommerce
-  IMAGE_TAG: latest
+  IMAGE_TAG: ${{ github.run_number }}
   HOST_PORT: 3000
   CONTAINER_PORT: 80
+  DOCKER_USER: ${{ secrets.DOCKER_USER }}
 
 jobs:
   build:
@@ -141,19 +142,27 @@ jobs:
         with:
           node-version: 18
 
-      # ---------------- CLEAN INSTALL (FIXED) ----------------
-      - name: Clean install dependencies
-        run: |
-          rm -rf node_modules package-lock.json || true
-          npm install
+      # ---------------- INSTALL DEPENDENCIES ----------------
+      - name: Install Dependencies
+        run: npm install
 
       # ---------------- BUILD REACT APP ----------------
       - name: Build React App
         run: npm run build
 
-      # ---------------- DOCKER BUILD ----------------
+      # ---------------- DOCKER LOGIN ----------------
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
+
+      # ---------------- BUILD DOCKER IMAGE ----------------
       - name: Build Docker Image
-        run: docker build -t ${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} .
+        run: |
+          docker build -t ${{ env.DOCKER_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} .
+
+      # ---------------- PUSH IMAGE ----------------
+      - name: Push Docker Image
+        run: |
+          docker push ${{ env.DOCKER_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
 
       # ---------------- STOP OLD CONTAINER ----------------
       - name: Stop Existing Container
@@ -162,17 +171,13 @@ jobs:
       - name: Remove Existing Container
         run: docker rm ${{ env.APP_NAME }} || true
 
-      # ---------------- RUN CONTAINER ----------------
+      # ---------------- RUN NEW CONTAINER ----------------
       - name: Run Docker Container
         run: |
           docker run -d \
           -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} \
           --name ${{ env.APP_NAME }} \
-          ${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
-
-      # ---------------- VERIFY ----------------
-      - name: Check Running Containers
-        run: docker ps
+          ${{ env.DOCKER_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
 
       # ---------------- HEALTH CHECK ----------------
       - name: Health Check
