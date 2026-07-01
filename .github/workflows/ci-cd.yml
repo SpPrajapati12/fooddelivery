@@ -1,4 +1,4 @@
-name: React CI/CD Pipeline
+name: React Production CI/CD Pipeline
 
 on:
   push:
@@ -8,77 +8,106 @@ on:
 env:
   APP_NAME: react-ecommerce
   CONTAINER_NAME: react-ecommerce
-  IMAGE_TAG: latest
+  IMAGE_TAG: ${{ github.run_number }}
   HOST_PORT: 3000
   CONTAINER_PORT: 80
+  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
+  DOCKER_HUB_PASS: ${{ secrets.DOCKER_HUB_PASS }}
 
 jobs:
-  build-and-deploy:
+  ci-cd:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout Repository
+      # ---------------- CHECKOUT ----------------
+      - name: Checkout Code
         uses: actions/checkout@v4
 
+      # ---------------- NODE SETUP ----------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
+      # ---------------- INSTALL ----------------
       - name: Install Dependencies
         run: npm ci
 
-      # ---------------- BUILD PHASE ----------------
+      # ---------------- BUILD ----------------
       - name: Build React App
-        id: build
-        run: |
-          echo "Starting build..."
-          npm run build
-          echo "Build completed successfully"
+        run: npm run build
 
-      # ---------------- DOCKER BUILD ----------------
-      - name: Build Docker Image
-        id: docker_build
+      # ---------------- DOCKER LOGIN ----------------
+      - name: Login to Docker Hub
         run: |
-          docker build -t ${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} .
-          echo "Docker image built successfully"
+          echo "${{ env.DOCKER_HUB_PASS }}" | docker login -u "${{ env.DOCKER_HUB_USER }}" --password-stdin
+
+      # ---------------- BUILD IMAGE ----------------
+      - name: Build Docker Image
+        run: |
+          docker build -t ${{ env.DOCKER_HUB_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} .
+
+      # ---------------- PUSH IMAGE ----------------
+      - name: Push Docker Image
+        run: |
+          docker push ${{ env.DOCKER_HUB_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
 
       # ---------------- STOP OLD CONTAINER ----------------
-      - name: Stop Existing Container
-        shell: cmd
+      - name: Stop Old Container
         run: |
-          docker stop ${{ env.CONTAINER_NAME }} || exit 0
-
-      - name: Remove Existing Container
-        shell: cmd
-        run: |
-          docker rm ${{ env.CONTAINER_NAME }} || exit 0
+          docker stop ${{ env.CONTAINER_NAME }} || true
+          docker rm ${{ env.CONTAINER_NAME }} || true
 
       # ---------------- RUN NEW CONTAINER ----------------
-      - name: Run Docker Container
+      - name: Run New Container
         run: |
           docker run -d ^
           -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} ^
           --name ${{ env.CONTAINER_NAME }} ^
-          ${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
+          ${{ env.DOCKER_HUB_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
 
-      # ---------------- VERIFY DEPLOYMENT ----------------
-      - name: Verify Container Status
+      # ---------------- HEALTH CHECK ----------------
+      - name: Health Check
+        shell: bash
         run: |
-          docker ps | findstr ${{ env.CONTAINER_NAME }}
-          if %ERRORLEVEL% NEQ 0 exit 1
+          echo "Checking app health..."
+          sleep 10
 
-      - name: Show Logs (if needed)
+          for i in {1..10}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${{ env.HOST_PORT }})
+            echo "Attempt $i - Status: $STATUS"
+
+            if [ "$STATUS" == "200" ]; then
+              echo "App is healthy ✅"
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Health check failed ❌"
+          exit 1
+
+      # ---------------- ROLLBACK ON FAILURE ----------------
+      - name: Rollback Previous Version
         if: failure()
         run: |
-          docker logs ${{ env.CONTAINER_NAME }}
+          echo "Rollback triggered..."
 
-      # ---------------- SUCCESS MESSAGE ----------------
+          docker stop ${{ env.CONTAINER_NAME }} || true
+          docker rm ${{ env.CONTAINER_NAME }} || true
+
+          docker run -d ^
+          -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} ^
+          --name ${{ env.CONTAINER_NAME }} ^
+          ${{ env.DOCKER_HUB_USER }}/${{ env.APP_NAME }}:latest
+
+      # ---------------- SUCCESS ----------------
       - name: Deployment Success
         if: success()
-        run: echo "Deployment completed successfully 🚀"
+        run: echo "🚀 Deployment successful"
 
-      # ---------------- FAILURE MESSAGE ----------------
-      - name: Deployment Failed
+      # ---------------- FAILURE LOG ----------------
+      - name: Deployment Failed Logs
         if: failure()
-        run: echo "Build or Deployment failed ❌"
+        run: docker logs ${{ env.CONTAINER_NAME }} || true
