@@ -195,7 +195,86 @@
 
 
 
-name: React CI/CD Pipeline
+# name: React CI/CD Pipeline
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# env:
+#   APP_NAME: react-ecommerce
+#   IMAGE_TAG: latest
+#   HOST_PORT: 3000
+#   CONTAINER_PORT: 80
+
+# jobs:
+#   build-and-deploy:
+#     runs-on:
+#       - self-hosted
+#       - windows
+
+#     steps:
+#       # Checkout latest code
+#       - name: Checkout Repository
+#         uses: actions/checkout@v4
+
+#       # Setup Node.js
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: 18
+
+#       # Install dependencies
+#       - name: Install Dependencies
+#         run: npm install
+
+#       # Build React application
+#       - name: Build React App
+#         run: npm run build
+
+#       # Stop existing container
+#       - name: Stop Existing Container
+#         shell: powershell
+#         run: |
+#           docker stop $env:APP_NAME 2>$null
+#           docker rm $env:APP_NAME 2>$null
+
+#       # Remove old image
+#       - name: Remove Old Image
+#         shell: powershell
+#         run: |
+#           docker rmi "$env:APP_NAME`:$env:IMAGE_TAG" 2>$null
+
+#       # Build new Docker image
+#       - name: Build Docker Image
+#         run: docker build -t $env:APP_NAME`:$env:IMAGE_TAG .
+
+#       # Run new container
+#       - name: Run Docker Container
+#         run: |
+#           docker run -d `
+#             -p $env:HOST_PORT`:$env:CONTAINER_PORT `
+#             --name $env:APP_NAME `
+#             $env:APP_NAME`:$env:IMAGE_TAG
+
+#       # Verify deployment
+#       - name: Show Running Containers
+#         run: docker ps
+
+#       # Show application URL
+#       - name: Deployment Complete
+#         shell: powershell
+#         run: |
+#           Write-Host ""
+#           Write-Host "=================================="
+#           Write-Host "Application deployed successfully!"
+#           Write-Host "URL: http://localhost:$env:HOST_PORT"
+#           Write-Host "=================================="
+
+
+
+name: React CI Build
 
 on:
   push:
@@ -205,17 +284,15 @@ on:
 env:
   APP_NAME: react-ecommerce
   IMAGE_TAG: latest
-  HOST_PORT: 3000
-  CONTAINER_PORT: 80
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on:
       - self-hosted
       - windows
 
     steps:
-      # Checkout latest code
+      # Checkout code
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -233,41 +310,10 @@ jobs:
       - name: Build React App
         run: npm run build
 
-      # Stop existing container
-      - name: Stop Existing Container
-        shell: powershell
-        run: |
-          docker stop $env:APP_NAME 2>$null
-          docker rm $env:APP_NAME 2>$null
-
-      # Remove old image
-      - name: Remove Old Image
-        shell: powershell
-        run: |
-          docker rmi "$env:APP_NAME`:$env:IMAGE_TAG" 2>$null
-
-      # Build new Docker image
+      # Build Docker image
       - name: Build Docker Image
-        run: docker build -t $env:APP_NAME`:$env:IMAGE_TAG .
+        run: docker build -t ${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} .
 
-      # Run new container
-      - name: Run Docker Container
-        run: |
-          docker run -d `
-            -p $env:HOST_PORT`:$env:CONTAINER_PORT `
-            --name $env:APP_NAME `
-            $env:APP_NAME`:$env:IMAGE_TAG
-
-      # Verify deployment
-      - name: Show Running Containers
-        run: docker ps
-
-      # Show application URL
-      - name: Deployment Complete
-        shell: powershell
-        run: |
-          Write-Host ""
-          Write-Host "=================================="
-          Write-Host "Application deployed successfully!"
-          Write-Host "URL: http://localhost:$env:HOST_PORT"
-          Write-Host "=================================="
+      # Verify image
+      - name: Show Docker Images
+        run: docker images
