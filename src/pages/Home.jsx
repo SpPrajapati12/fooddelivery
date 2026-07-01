@@ -101,7 +101,7 @@ const Home = () => {
                 <h5 className="mb-3">Easy way to make an order</h5>
                 <h1 className="mb-4 hero__title">
                   <span>HUNGRY?</span> Just wait <br /> food at
-                  <span> your door</span>
+                  <span> your door version 1</span>
                 </h1>
 
                 <p>
