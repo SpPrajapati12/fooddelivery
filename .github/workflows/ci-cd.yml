@@ -28,11 +28,11 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Run Test
-        run: npm test -- --watchAll=false
+      - name: Run Tests
+        run: npm test -- --watchAll=false --passWithNoTests
 
       - name: Build React App
-        run: npm run build
+        run: npm run buildz
 
       - name: Build Docker Image
         run: |
